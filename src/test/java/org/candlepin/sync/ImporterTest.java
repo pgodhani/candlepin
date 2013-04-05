@@ -78,6 +78,7 @@ public class ImporterTest {
     private I18n i18n;
     private static final String MOCK_JS_PATH = "/tmp/empty.js";
     private CandlepinCommonTestConfig config;
+    private static final File[] EMPTY_FILE_ARRAY = new File[0];
 
     @Before
     public void init() throws FileNotFoundException, URISyntaxException {
@@ -636,4 +637,44 @@ public class ImporterTest {
 
         verify(oc).merge(any(Owner.class));
     }
+
+    @Test
+    public void handleNullUpstreamFiles()
+        throws IOException, ImporterException {
+        ConsumerTypeCurator ctc = mock(ConsumerTypeCurator.class);
+        RulesImporter ri = mock(RulesImporter.class);
+        ExporterMetadataCurator emc = mock(ExporterMetadataCurator.class);
+        OwnerCurator oc = mock(OwnerCurator.class);
+        Owner owner = mock(Owner.class);
+        ConflictOverrides co = mock(ConflictOverrides.class);
+        Map<String, File> importFiles = new HashMap<String, File>();
+        File ruleDir = mock(File.class);
+        File[] rulesFiles = createMockJsFile(MOCK_JS_PATH);
+        File actualmeta = createFile("/tmp/meta.json", "0.0.3", new Date(),
+            "test_user", "prefix");
+        File consumerfile = new File("target/test/resources/upstream/consumer.json");
+        ConsumerType type = new ConsumerType(ConsumerTypeEnum.CANDLEPIN);
+
+        importFiles.put(ImportFile.META.fileName(), actualmeta);
+        importFiles.put(ImportFile.RULES_FILE.fileName(), rulesFiles[0]);
+        importFiles.put(ImportFile.PRODUCTS.fileName(), null);
+        importFiles.put(ImportFile.ENTITLEMENTS.fileName(), null);
+        importFiles.put(ImportFile.UPSTREAM_CONSUMER.fileName(), mock(File.class));
+        importFiles.put(ImportFile.CONSUMER_TYPE.fileName(), mock(File.class));
+        importFiles.put(ImportFile.CONSUMER.fileName(), consumerfile);
+
+        when(ruleDir.listFiles()).thenReturn(rulesFiles);
+        when(ctc.lookupByLabel(eq("candlepin"))).thenReturn(type);
+        when(importFiles.get(ImportFile.CONSUMER_TYPE.fileName()).listFiles()).thenReturn(EMPTY_FILE_ARRAY);
+
+        // simulate using a normal file for upstream consumer, make sure
+        // we don't die
+        when(importFiles.get(ImportFile.UPSTREAM_CONSUMER.fileName()).isDirectory()).thenReturn(false);
+
+        Importer i = new Importer(ctc, null, ri, oc, null, null, null,
+            null, config, emc, null, null, i18n);
+
+        i.importObjects(owner, importFiles, co);
+    }
+
 }

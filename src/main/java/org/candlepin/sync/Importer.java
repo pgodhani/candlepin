@@ -377,7 +377,10 @@ public class Importer {
             File upstreamFile = importFiles.get(ImportFile.UPSTREAM_CONSUMER.fileName());
             File[] dafiles = new File[0];
             if (upstreamFile != null) {
-                dafiles = upstreamFile.listFiles();
+                // prevents an NPE from listFiles
+                if (upstreamFile.isDirectory()) {
+                    dafiles = upstreamFile.listFiles();
+                }
             }
             consumer = importConsumer(owner, consumerFile,
                 dafiles, overrides, m);
@@ -485,7 +488,7 @@ public class Importer {
             }
             else {
                 log.warn("Extra file found in upstream_consumer directory: " +
-                    (uc != null ? uc.getName() : "null"));
+                    uc.getName());
             }
         }
 
