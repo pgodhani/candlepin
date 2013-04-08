@@ -205,12 +205,16 @@ public class ComplianceRulesTest {
         ComplianceStatus status = compliance.getStatus(c, TestUtil.createDate(2011, 8, 30));
 
         // Our one entitlement should not cover both of these:
+        assertTrue(status.getCompliantProducts().keySet().contains(PRODUCT_2));
+        assertTrue(status.getCompliantProducts().keySet().contains("Awesome Product"));
         assertEquals(1, status.getCompliantProducts().size());
         assertEquals(0, status.getNonCompliantProducts().size());
         assertEquals(1, status.getPartiallyCompliantProducts().size());
         assertTrue(status.getCompliantProducts().keySet().contains(PRODUCT_2));
         assertTrue(status.getPartiallyCompliantProducts().keySet().contains(PRODUCT_1));
         assertEquals("partial", status.getStatus());
+        assertEquals(1, status.getReasons().size());
+        assertEquals("ARCH", ((String)status.getReasons().get(status.getReasons().keySet().toArray()[0]).toArray()[0]).substring(0,4));
     }
 
     /*
@@ -235,6 +239,8 @@ public class ComplianceRulesTest {
         assertEquals(0, status.getPartialStacks().size());
 
         assertTrue(status.getPartiallyCompliantProducts().keySet().contains(PRODUCT_1));
+        assertEquals(1, status.getReasons().get("Awesome Product").size());
+        assertEquals("SOCKETS[8,4]", status.getReasons().get("Awesome Product").toArray()[0]);
     }
 
     /*

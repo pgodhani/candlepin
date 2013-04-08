@@ -975,12 +975,12 @@ var Compliance = {
     is_stack_compliant: function() {
         var context = Compliance.get_status_context();
         return Compliance.stack_is_compliant(context.consumer, context.stack_id,
-            context.entitlements, log, context.prodAttrSeparator);
+            context.entitlements, log);
     },
 
     is_ent_compliant: function () {
         var context = Compliance.get_status_context();
-        return Compliance.ent_is_compliant(context.consumer, context.entitlement, log);
+        return (Compliance.ent_is_compliant(context.consumer, context.entitlement, log));
     },
 
     filterEntitlementsByDate: function (entitlements, date) {
@@ -1034,6 +1034,8 @@ var Compliance = {
             // List of non-compliant product IDs:
             nonCompliantProducts: [],
 
+            reasons: {},
+
             /*
              * Add entitlement to partial stack list, or create list if it does not
              * already exist.
@@ -1062,6 +1064,14 @@ var Compliance = {
             },
 
             /*
+             * Add a reason for noncompliance to a product
+             */
+            add_reason: function (product_id, reason) {
+                this.reasons[product_id] = this.reasons[product_id] || [];
+                this.reasons[product_id].push(reason);
+            },
+
+            /*
              * Return boolean indicating whether the system is compliant or not.
              */
             isCompliant: function() {
@@ -1075,36 +1085,37 @@ var Compliance = {
         var compliant_stack_ids = [];
         var non_compliant_stack_ids = [];
 
-        var separator = Entitlement.get_attribute_context().prodAttrSeparator;
         log.debug("Checking compliance status for consumer: " + consumer.uuid + " on date: " + ondate);
         var entitlementsOnDate = Compliance.filterEntitlementsByDate(entitlements, ondate);
         for (var k = 0; k < entitlementsOnDate.length; k++) {
             var e = entitlementsOnDate[k];
-
+            var separator = e.get_attribute_context().prodAttrSeparator;
             log.debug("  checking entitlement: " + e.id);
             relevant_pids = find_relevant_pids(e, consumer);
+
             log.debug("    relevant products: " + relevant_pids);
 
-            partially_stacked = false;
+            partially_stacked_sockets = false;
             var ent_is_stacked = is_stacked(e);
+            var stack_id;
             // If the pool is stacked, check that the stack requirements are met:
             if (ent_is_stacked) {
-                var stack_id = e.pool.getProductAttribute("stacking_id");
+                stack_id = e.pool.getProductAttribute("stacking_id");
                 log.debug("    pool has stack ID: " + stack_id);
 
                 // Shortcuts for stacks we've already checked:
                 if (Utils.inArray(non_compliant_stack_ids, stack_id)) {
                     log.debug("    stack already found to be non-compliant");
-                    partially_stacked = true;
+                    partially_stacked_sockets = true;
                     compStatus.add_partial_stack(stack_id, e);
                 }
                 else if (Utils.inArray(compliant_stack_ids, stack_id)) {
                     log.debug("    stack already found to be compliant");
                 }
                 // Otherwise check the stack and add appropriately:
-                else if(!Compliance.stack_is_compliant(consumer, stack_id, entitlements, log, separator)) {
+                else if(!Compliance.stack_is_compliant(consumer, stack_id, entitlements, log)) {
                     log.debug("    stack is non-compliant");
-                    partially_stacked = true;
+                    partially_stacked_sockets = true;
                     compStatus.add_partial_stack(stack_id, e);
                     non_compliant_stack_ids.push(stack_id);
                 }
@@ -1114,20 +1125,32 @@ var Compliance = {
                 }
             }
 
+            var yellow = false;
+            var marketing_product = e.pool.productId;
+            //test for compliance
+            if (partially_stacked_sockets) {
+                yellow = true;
+                compStatus.add_reason(marketing_product, "STACKSOCKETS[" + consumer.facts[SOCKET_FACT] + "," + this.stack_covers_sockets(stack_id, entitlements, log) + "]");
+            }
+            if(!Compliance.ent_is_arch_compliant(consumer, e, log, separator)) {
+                yellow = true;
+                compStatus.add_reason(marketing_product, "ARCH[" + consumer.facts['uname.machine'] + "," + e.pool.getProductAttribute('arch') + "]");
+            }
+            if(!Compliance.ent_is_ram_compliant(consumer, e, log)) {
+                yellow = true;
+                compStatus.add_reason(marketing_product, "RAM[" + get_consumer_ram(consumer) + "," + ent.pool.getProductAttribute("ram") + "]");
+            }
+            if(!ent_is_stacked && !Compliance.ent_is_socket_compliant(consumer, e, log)) {
+                yellow = true;
+                compStatus.add_reason(marketing_product, "SOCKETS[" + Compliance.consumer_sockets(consumer) + "," + get_pool_sockets(e.pool) + "]");
+            }
+
             for (var m = 0; m < relevant_pids.length; m++) {
                 var relevant_pid = relevant_pids[m];
-                if (partially_stacked) {
-                    log.debug("   partially compliant: " + relevant_pid);
-                    compStatus.add_partial_product(relevant_pid, e);
-                }
-                else if ((!Compliance.ent_is_compliant(consumer, e, log) ||
-                            !Compliance.ent_is_arch_compliant(consumer, e, log, separator)) &&
-                            !ent_is_stacked) {
-                    log.debug("    partially compliant (non-stacked): " + relevant_pid);
-                    compStatus.add_partial_product(relevant_pid, e);
-                }
-                else if (!Compliance.ent_is_arch_compliant(consumer, e, log, separator)) {
-                    log.debug("    partially compliant arch: " + relevant_pid);
+
+                //now we categorize
+                if (yellow) {
+                    log.debug("    partially compliant: " + relevant_pid);
                     compStatus.add_partial_product(relevant_pid, e);
                 }
                 else {
@@ -1158,6 +1181,7 @@ var Compliance = {
             if (typeof compStatus.compliantProducts[installed_pid] === "undefined" &&
                     typeof compStatus.partiallyCompliantProducts[installed_pid] === "undefined") {
                 compStatus.nonCompliantProducts.push(installed_pid);
+                //compStatus.add_reason(installed_pid, "NOSUB");
             }
         }
         return compStatus;
@@ -1212,27 +1236,15 @@ var Compliance = {
         return true;
     },
 
-    /**
-     * Check the given list of entitlements to see if a stack ID is compliant for
-     * a consumer's socket count.
+    /*
+     * Get the number of sockets a stack covers
      */
-    stack_is_compliant: function(consumer, stack_id, ents, log, separator) {
-        log.debug("Checking stack compliance for: " + stack_id);
-        var consumer_sockets = 1;
-        if (consumer.facts[SOCKET_FACT]) {
-            consumer_sockets = parseInt(consumer.facts[SOCKET_FACT]);
-        }
-        log.debug("Consumer sockets: " + consumer_sockets);
-
+    stack_covers_sockets: function(stack_id, ents, log) {
         var covered_sockets = 0;
         for (var k = 0; k < ents.length; k++) {
             var ent = ents[k];
 
             if (is_stacked(ent)) {
-                if (!Compliance.ent_is_arch_compliant(consumer, ent, log, separator)) {
-                    log.debug("Ent " + ent.id + " does not match consumer architecture.");
-                    return false;
-                }
                 var currentStackId = ent.pool.getProductAttribute("stacking_id");
                 if (currentStackId == stack_id) {
                     covered_sockets += get_pool_sockets(ent.pool) * ent.quantity;
@@ -1240,19 +1252,41 @@ var Compliance = {
                 }
             }
         }
+        return covered_sockets
+    },
 
+    /**
+     * Check the given list of entitlements to see if a stack ID is compliant for
+     * a consumer's socket count.
+     */
+    stack_is_compliant: function(consumer, stack_id, ents, log) {
+        log.debug("Checking stack compliance for: " + stack_id);
+        var consumer_sockets = 1;
+        if (consumer.facts[SOCKET_FACT]) {
+            consumer_sockets = parseInt(consumer.facts[SOCKET_FACT]);
+        }
+        log.debug("Consumer sockets: " + consumer_sockets);
+        var covered_sockets = this.stack_covers_sockets(stack_id, ents, log);
         return covered_sockets >= consumer_sockets;
     },
 
     /*
-     * Check an entitlement to see if it provides sufficent CPU sockets a consumer.
+     * Gets number of consumers sockets
      */
-    ent_is_compliant: function(consumer, ent, log) {
-        log.debug("Checking entitlement compliance: " + ent.id);
+    consumer_sockets: function(consumer) {
         var consumerSockets = 1;
         if (!(typeof consumer.facts[SOCKET_FACT] === undefined)) {
             consumerSockets = parseInt(consumer.facts[SOCKET_FACT]);
         }
+        return consumerSockets;
+    },
+
+    /*
+     * Check entitlement to see if it provides sufficient sockets
+     */
+    ent_is_socket_compliant: function(consumer, ent, log) {
+        log.debug("Checking entitlement compliance: " + ent.id);
+        var consumerSockets = this.consumer_sockets(consumer);
         log.debug("  Consumer sockets found: " + consumerSockets);
 
         var coveredSockets = get_pool_sockets(ent.pool);
@@ -1262,8 +1296,13 @@ var Compliance = {
             log.debug("  Entitlement does not cover system sockets.");
             return false;
         }
+        return true;
+    },
 
-        // Verify RAM coverage if required.
+    /*
+     * Check entitlement to see if it provides sufficient ram
+     */
+    ent_is_ram_compliant: function(consumer, ent, log) {
         // Default consumer RAM to 1 GB if not defined
         var consumerRam = get_consumer_ram(consumer);
         log.debug("  Consumer RAM found: " + consumerRam);
@@ -1285,10 +1324,18 @@ var Compliance = {
                 log.debug("  Pool's RAM attribute was empty. Skipping RAM check.");
             }
         }
-
         return true
-    }
+    },
 
+    /*
+     * Check an entitlement to see if it provides sufficent CPU sockets a consumer.
+     */
+    ent_is_compliant: function(consumer, ent, log) {
+        if(!this.ent_is_socket_compliant(consumer, ent, log)) {
+            return false;
+        }
+        return this.ent_is_ram_compliant(consumer, ent, log);
+    }
 }
 
 

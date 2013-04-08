@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.candlepin.model.Entitlement;
+import org.xnap.commons.i18n.I18n;
 
 /**
  * ComplianceStatus
@@ -39,20 +40,27 @@ public class ComplianceStatus {
     private Map<String, Set<Entitlement>> compliantProducts;
     private Map<String, Set<Entitlement>> partiallyCompliantProducts; // stacked
     private Map<String, Set<Entitlement>> partialStacks;
+    private I18n i18n;;
 
-    public ComplianceStatus() {
+    private Map<String, Set<String>> reasons;
+
+    public ComplianceStatus(I18n i18n) {
         this.nonCompliantProducts = new HashSet<String>();
         this.compliantProducts = new HashMap<String, Set<Entitlement>>();
         this.partiallyCompliantProducts = new HashMap<String, Set<Entitlement>>();
         this.partialStacks = new HashMap<String, Set<Entitlement>>();
+        this.setReasons(new HashMap<String, Set<String>>());
+        this.i18n = i18n;
     }
 
-    public ComplianceStatus(Date date) {
+    public ComplianceStatus(Date date, I18n i18n) {
         this.date = date;
         this.nonCompliantProducts = new HashSet<String>();
         this.compliantProducts = new HashMap<String, Set<Entitlement>>();
         this.partiallyCompliantProducts = new HashMap<String, Set<Entitlement>>();
         this.partialStacks = new HashMap<String, Set<Entitlement>>();
+        this.setReasons(new HashMap<String, Set<String>>());
+        this.i18n = i18n;
     }
 
     /**
@@ -133,17 +141,38 @@ public class ComplianceStatus {
     }
 
     public boolean isCompliant() {
-        return nonCompliantProducts.isEmpty() && partiallyCompliantProducts.isEmpty();
+        return reasons.isEmpty();
     }
 
     public String getStatus() {
         if (isCompliant()) {
             return GREEN;
         }
-        if (!partiallyCompliantProducts.isEmpty() && nonCompliantProducts.isEmpty()) {
+        if (nonCompliantProducts.isEmpty()) {
             return YELLOW;
         }
         return RED;
+    }
+
+    public Map<String, Set<String>> getReasons() {
+        return reasons;
+    }
+
+    public void setReasons(Map<String, Set<String>> reasons) {
+        this.reasons = new HashMap<String, Set<String>>();
+        for(String key : reasons.keySet()) {
+            for(String ent : reasons.get(key)) {
+                //this.reasons.put(key, value);
+            }
+        }
+        this.reasons = reasons;
+    }
+
+    private String getHumanReadable(String entId, String reason) {
+        String user = reason.substring(reason.indexOf("["), reason.indexOf(","));
+        String covered = reason.substring(reason.indexOf(",") + 1, reason.indexOf("]"));
+        String result = i18n.tr("User has {0}, but entitlement {1} covers {2}", user, entId, covered);
+        return result;
     }
 
 }
