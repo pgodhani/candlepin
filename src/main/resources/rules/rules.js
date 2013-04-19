@@ -1101,6 +1101,7 @@ var Compliance = {
 
             partially_stacked = false;
             var ent_is_stacked = is_stacked(e);
+            var stack_id;
             // If the pool is stacked, check that the stack requirements are met:
             if (ent_is_stacked) {
                 var stack_id = e.pool.getProductAttribute("stacking_id");
@@ -1127,7 +1128,7 @@ var Compliance = {
                     compliant_stack_ids.push(stack_id);
                 }
             }
-            compStatus.add_reason("SOCKETS", e.id, 8, 4, false);
+            compStatus.add_reason("SOCKETS", stack_id, 8, 4, true);
             for (var m = 0; m < relevant_pids.length; m++) {
                 var relevant_pid = relevant_pids[m];
                 if (partially_stacked) {

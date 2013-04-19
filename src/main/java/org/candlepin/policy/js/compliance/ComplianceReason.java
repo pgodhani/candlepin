@@ -107,13 +107,17 @@ public class ComplianceReason {
     }
 
     private String getStackedMarketingName(String stackId) {
+        String result = "";
         for (Entitlement e : consumer.getEntitlements()) {
             if (e.getPool().getProductAttributes().contains("stacking_id") &&
-                e.getPool().getProductAttribute("stacking_id").getValue().equals(stackId)) {
-                return e.getPool().getProductName();
+                e.getPool().getProductAttribute("stacking_id").getId().equals(stackId)) {
+                result += e.getPool().getProductName() + " and ";
             }
         }
-        return "UNABLE_TO_GET_NAME";
+        if (result.length()<5) {
+            return "BAD VAL";
+        }
+        return result.substring(0,result.length()-5);
     }
 
     private String getMarketingName(String id) {
