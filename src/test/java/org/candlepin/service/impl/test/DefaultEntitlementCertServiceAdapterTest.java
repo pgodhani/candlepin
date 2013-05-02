@@ -52,6 +52,7 @@ import java.util.StringTokenizer;
 import java.util.zip.InflaterOutputStream;
 
 import org.candlepin.config.Config;
+import org.candlepin.model.Arch;
 import org.candlepin.model.CertificateSerial;
 import org.candlepin.model.CertificateSerialCurator;
 import org.candlepin.model.Consumer;
@@ -222,6 +223,9 @@ public class DefaultEntitlementCertServiceAdapterTest {
     private Content createContent(String name, String id, String label,
         String type, String vendor, String url, String gpgUrl) {
         Content c = new Content(name, id, label, type, vendor, url, gpgUrl);
+        Arch arch = new Arch();
+        arch.setLabel("z80");
+        c.setArches(Collections.singleton(arch));
         return c;
     }
 
