@@ -396,7 +396,7 @@ class Candlepin
       'type' => type,
       'vendor' => vendor,
       'contentUrl' => content_url,
-      'arches' => arches,
+      'arches' => arches.collect { |pid| {'id' => pid} },
       'gpgUrl' => gpg_url,
       'modifiedProductIds' => modified_product_ids
     }
