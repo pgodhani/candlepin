@@ -385,6 +385,7 @@ class Candlepin
     metadata_expire = params[:metadata_expire] || nil
     required_tags = params[:required_tags] || nil
     content_url = params[:content_url] || ""
+    arches = params[:arches] || []
     gpg_url = params[:gpg_url] || ""
     modified_product_ids = params[:modified_products] || []
 
@@ -395,6 +396,7 @@ class Candlepin
       'type' => type,
       'vendor' => vendor,
       'contentUrl' => content_url,
+      'arches' => arches,
       'gpgUrl' => gpg_url,
       'modifiedProductIds' => modified_product_ids
     }
